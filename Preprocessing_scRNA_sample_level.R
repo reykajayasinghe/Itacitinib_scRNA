@@ -41,16 +41,14 @@ if (is.null(opt$input)){
 
 ###########################################################################################
 ## Run doublet finder
-##
-## This script will need to be run on Seurat Object
-## Before running this script, please run 1) SCTransform, and 2) PCA on the seurat object
 ###########################################################################################
 
+#Reference: https://github.com/chris-mcginnis-ucsf/DoubletFinder
 RunDoubletFinder = function(seu){
 
   min.pc = 10
   ## Run Doublet finding algorithm
-  sweep.list = paramSweep_v3(seu, PCs = 1:min.pc, num.cores = 2, sct = TRUE)
+  sweep.list = paramSweep(seu, PCs = 1:min.pc, num.cores = 2, sct = TRUE)
   sweep.stats = summarizeSweep(sweep.list,GT=FALSE)
   bcmvn = find.pK(sweep.stats)
   # Optimal pK is the max of the bomodality coefficent (BCmvn) distribution
@@ -63,9 +61,9 @@ RunDoubletFinder = function(seu){
   nExp.poi <- round(optimal.pk * nrow(seu@meta.data)) 
   nExp.poi.adj <- round(nExp.poi * (1 - homotypic.prop))
   # run DoubletFinder
-  seu <- doubletFinder_v3(seu = seu,PCs = 1:min.pc,pK = optimal.pk,nExp = nExp.poi.adj,sct = T)
+  seu <- doubletFinder(seu = seu,PCs = 1:min.pc,pK = optimal.pk,nExp = nExp.poi.adj,sct = T)
   colnames(seu@meta.data)[grep("DF.classifications",names(head(seu)))]="doublet_finder"
-#If you want to remove doublets then uncomment next line
+  #If you want to remove doublets then uncomment next line
   #seu = subset(seu, doublet_finder %in% "Singlet")
   seu@meta.data = seu@meta.data[,colnames(seu@meta.data)[-grep("pANN_",colnames(seu@meta.data))]]
   seu = RunPCA(seu,verbose=F)
@@ -100,23 +98,15 @@ RunSeurat = function(dat,project_name,out_path){
  #if use filtered feature matrix below filtering alone should suffice
  # seu = subset(seu, subset = percent_mito<20 & percent_ribo < 5 & percent_hb < 1 )
 
-  #seu = subset(seu,subset = nCount_RNA>10 & nCount_RNA<20000 & nFeature_RNA > 10 & nFeature_RNA < 8000)
   ## Data normalization and cell cycle scoring
   seu = NormalizeData(seu,verbose=F)
   seu = CellCycleScoring(seu,g2m.features=cc.genes$g2m.genes,s.features=cc.genes$s.genes,verbose=F)
-
-  ## Identify highly variable genes
-  # seu = FindVariableFeatures(seu,selection.method="vst",nfeatures = 2000,verbose=F)
-  ## Regress out %mito, %ribo and %RBC + scale data
-  #seu = ScaleData(seu,vars.to.regress=c("nCount_RNA","S.Score","G2M.Score","percent_mito","percent_hb","percent_ribo"),verbose=F)
-  ## Compute PCs and find min PCs from elbowpoint method required for UMAP-ing
 
   #Plot pre-filter metadata
    pdf(paste(out_path,"/Post_QC_in_sample_",project_name, ".pdf", sep=""), width=12, height=7)
     plot1<-VlnPlot(object = seu, features = c("nFeature_RNA", "nCount_RNA", "percent_mito", "percent_hb", "percent_ribo"), ncol = 5,raster=TRUE)
 	print(plot1)
   dev.off()
-
 
   seu = SCTransform(seu, method = "glmGamPoi", vars.to.regress=c("nCount_RNA","S.Score","G2M.Score","percent_mito","percent_hb","percent_ribo"), verbose = FALSE)
   seu = RunPCA(seu,verbose=F)
@@ -160,7 +150,6 @@ panc=RunSeurat(expression_matrix,sample_id,out_path)
 
 #Save sample name in metadata
 panc@meta.data$sample_id<-sample_id
-
 
 # save object so far
 saveRDS(panc,file = paste(out_path,"/",sample_id, "_processed.rds", sep=""))
